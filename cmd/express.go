@@ -22,16 +22,15 @@ package cmd
 
 import (
 	"fmt"
-	"net/http"
-	"strings"
 
 	"github.com/skitta/goquery/api/express"
+	"github.com/skitta/goquery/api/slack"
 	"github.com/spf13/cobra"
 )
 
-var (
-	expressNum string
-)
+var expressNum string
+
+const expressHook = "https://hooks.slack.com/services/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"
 
 // expressCmd represents the express command
 var expressCmd = &cobra.Command{
@@ -46,53 +45,40 @@ Run this command without flag will scan database by default.`,
 func init() {
 	RootCmd.AddCommand(expressCmd)
 
-	expressCmd.Flags().StringVarP(&expressNum, "number", "n", "", "express number")
+	expressCmd.Flags().StringVarP(&expressNum, "add", "a", "", "express number")
 }
 
 func trackRun(cmd *cobra.Command, args []string) {
 	if expressNum == "" {
 		trackByScanDB()
 	} else {
-		trackByNum()
+		addExpressNum()
 	}
 }
 
-func trackByNum() {
+func addExpressNum() {
 	p := express.Track(expressNum)
-	if p.Value == "" {
-		msg := "No Such A Package!"
-		postToHubot("http://127.0.0.1:8080/hubot/webhoods/express", msg)
-		fmt.Println(msg)
+	if p.Value != "" {
+		m := slack.NewMessage(fmt.Sprintf("Status of express %s", p.ID), "")
+		m.AddField("Express Status", p.Value, false)
+		slack.Post(expressHook, m)
+		p.Update()
 	}
-	postToHubot("http://127.0.0.1:8080/hubot/webhoods/express", p.Value)
-	fmt.Println(p.Value)
 }
 
 func trackByScanDB() {
-	allpackages := express.GetAllPackages()
+	ps := express.GetAllPackages()
 
-	if len(allpackages) == 0 {
-		fmt.Println("No package in your database.")
-		return
-	}
-
-	for i := 0; i < len(allpackages); i++ {
-		p := express.Track(allpackages[i].Key)
-		if p.Value != allpackages[i].Value {
-			fmt.Println(p.Value)
-			postToHubot("http://127.0.0.1:8080/hubot/webhoods/express", p.Value)
+	for i := 0; i < len(ps); i++ {
+		p := express.Track(ps[i].ID)
+		if p.Value != ps[i].Value {
+			m := slack.NewMessage(fmt.Sprintf("Status of express %s", p.ID), "")
+			m.AddField("Express Status", p.Value, false)
+			slack.Post(expressHook, m)
 			p.Update()
 		}
 		if p.Checked() {
-			s := fmt.Sprintf("package %s is checked.", allpackages[i].Key)
-			fmt.Println(s)
 			p.Del()
 		}
 	}
-}
-
-func postToHubot(URL, msg string) {
-	data := fmt.Sprintf("{\"message\": \"%s\"}", msg)
-	payload := strings.NewReader(data)
-	http.Post(URL, "application/json", payload)
 }

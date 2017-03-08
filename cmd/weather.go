@@ -22,18 +22,22 @@ package cmd
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/skitta/goquery/api/openweather"
+	"github.com/skitta/goquery/api/slack"
 	"github.com/spf13/cobra"
+)
+
+const (
+	weatherHook = "https://hooks.slack.com/services/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"
 )
 
 // weatherCmd represents the weather command
 var weatherCmd = &cobra.Command{
 	Use:   "weather",
 	Short: "Weather report daily",
-	Long:  `Get today's weather report form openweather, and push it to your smartphone.`,
+	Long:  `Get today's weather form openweather, and post to your slack webhook.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		city := strings.Join(args, "")
 		info, result, err := openweather.GetDaily(city)
@@ -41,15 +45,13 @@ var weatherCmd = &cobra.Command{
 			return err
 		}
 
-		msg := fmt.Sprintf("%s: %s", city, result)
-		if info == "Rain" {
-			URL := "http://127.0.0.1:8080/hubot/webhoods/weather"
-			data := fmt.Sprintf("{\"message\": \"%s\"}", msg)
-			payload := strings.NewReader(data)
-			http.Post(URL, "application/json", payload)
+		m := slack.NewMessage(fmt.Sprintf("Today's weather in %s", city), "")
 
-			fmt.Println(data)
+		if info == "Rain" {
+			m.AddColor("#D00000")
 		}
+		m.AddField(info, result, false)
+		slack.Post(weatherHook, m)
 
 		return nil
 	},
